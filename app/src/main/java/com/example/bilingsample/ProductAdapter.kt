@@ -6,11 +6,17 @@ import androidx.recyclerview.widget.RecyclerView
 import com.android.billingclient.api.ProductDetails
 import com.example.bilingsample.databinding.ItemProductBinding
 
-class ProductAdapter(private val dataSet: MutableList<ProductDetails>): RecyclerView.Adapter<ProductAdapter.ViewHolder>() {
+class ProductAdapter(
+    private val dataSet: List<ProductDetails>,
+    private val onClick: (productDetails: ProductDetails) -> Unit
+    ): RecyclerView.Adapter<ProductAdapter.ViewHolder>() {
 
     inner class ViewHolder(private val binding: ItemProductBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(productDetails: ProductDetails) {
-            binding.textView.text = productDetails.name
+            binding.button.text = productDetails.name
+            binding.button.setOnClickListener {
+                onClick.invoke(productDetails)
+            }
         }
     }
 

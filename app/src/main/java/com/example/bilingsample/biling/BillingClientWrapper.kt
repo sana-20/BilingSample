@@ -2,13 +2,16 @@ package com.example.bilingsample.biling
 
 import android.app.Activity
 import android.content.Context
-import android.icu.lang.UCharacter.GraphemeClusterBreak.L
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.android.billingclient.api.*
+import com.example.bilingsample.Constants.LIST_OF_PRODUCTS
+import com.example.bilingsample.Constants.TAG
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 class BillingClientWrapper(
     context: Context
@@ -16,6 +19,10 @@ class BillingClientWrapper(
 
     private val _productDetails = MutableLiveData<Map<String, ProductDetails>>()
     val productDetails : LiveData<Map<String, ProductDetails>> = _productDetails
+
+    private val _connection = MutableLiveData<Boolean>()
+    val connection: LiveData<Boolean> = _connection
+
 
     private val billingClient = BillingClient.newBuilder(context)
         .setListener(this)
@@ -27,7 +34,8 @@ class BillingClientWrapper(
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.i(TAG, "Billing response OK")
-                    queryPurchases()
+                    _connection.postValue(true)
+                    //queryPurchases()
                     queryProductDetails()
                 } else {
                     Log.i(TAG, billingResult.debugMessage)
@@ -41,6 +49,25 @@ class BillingClientWrapper(
         })
     }
 
+    suspend fun query2() {
+        val params = QueryProductDetailsParams.newBuilder()
+        val productList = mutableListOf<QueryProductDetailsParams.Product>()
+        for (product in LIST_OF_PRODUCTS) {
+            productList.add(
+                QueryProductDetailsParams.Product.newBuilder()
+                    .setProductId(product)
+                    .setProductType(BillingClient.ProductType.SUBS)
+                    .build()
+            )
+        }
+
+        val productDetailsResult = withContext(Dispatchers.IO) {
+            billingClient.queryProductDetails(params.setProductList(productList).build())
+        }
+
+        Log.d(TAG, "결과: $productDetailsResult")
+    }
+
 
     fun queryPurchases() {
         if (!billingClient.isReady) {
@@ -52,7 +79,9 @@ class BillingClientWrapper(
         ) { billingResult, purchaseList ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                 //_purchases.value = purchaseList.ifEmpty { emptyList() }
+                Log.d(TAG, "구입 내역 리스트 성공")
             } else {
+                Log.d(TAG, "구입 내역 리스트 실패")
                 Log.e(TAG, billingResult.debugMessage)
             }
         }
@@ -80,7 +109,6 @@ class BillingClientWrapper(
         billingResult: BillingResult,
         productDetailsList: MutableList<ProductDetails>
     ) {
-        Log.d(TAG, productDetailsList.toString())
         when (billingResult.responseCode) {
             BillingClient.BillingResponseCode.OK -> {
                 var newMap = emptyMap<String, ProductDetails>()
@@ -95,8 +123,7 @@ class BillingClientWrapper(
                 } else {
                     newMap = productDetailsList.associateBy { it.productId }
                 }
-                _productDetails.value = newMap
-                //_productWithProductDetails.value = newMap
+                _productDetails.postValue(newMap)
             }
             else -> {
                 Log.d(
@@ -159,14 +186,6 @@ class BillingClientWrapper(
     }
 
 
-    companion object {
-        private const val TAG = "BillingClient"
-
-        private const val BASIC_SUB = "basic_subscription"
-        private const val PREMIUM_SUB = "premium_subscription"
-
-        private val LIST_OF_PRODUCTS = listOf(BASIC_SUB, PREMIUM_SUB)
-    }
 
 
 }
