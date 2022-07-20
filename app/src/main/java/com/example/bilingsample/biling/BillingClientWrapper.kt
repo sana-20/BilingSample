@@ -3,26 +3,30 @@ package com.example.bilingsample.biling
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.android.billingclient.api.*
 import com.example.bilingsample.Constants.LIST_OF_PRODUCTS
 import com.example.bilingsample.Constants.TAG
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 class BillingClientWrapper(
-    context: Context
-) : PurchasesUpdatedListener, ProductDetailsResponseListener {
+    private val context: Context
+) :  PurchasesUpdatedListener, ProductDetailsResponseListener {
 
-    private val _productDetails = MutableLiveData<Map<String, ProductDetails>>()
-    val productDetails : LiveData<Map<String, ProductDetails>> = _productDetails
+    val productDetails = MutableLiveData<Map<String, ProductDetails>>()
 
-    private val _connection = MutableLiveData<Boolean>()
-    val connection: LiveData<Boolean> = _connection
+    private val _purchases = MutableStateFlow<List<Purchase>>(listOf())
+    val purchases = _purchases.asStateFlow()
 
+    private val _isNewPurchaseAcknowledged = MutableStateFlow(value = false)
+    val isNewPurchaseAcknowledged = _isNewPurchaseAcknowledged.asStateFlow()
 
     private val billingClient = BillingClient.newBuilder(context)
         .setListener(this)
@@ -34,8 +38,7 @@ class BillingClientWrapper(
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.i(TAG, "Billing response OK")
-                    _connection.postValue(true)
-                    //queryPurchases()
+                    queryPurchases()
                     queryProductDetails()
                 } else {
                     Log.i(TAG, billingResult.debugMessage)
@@ -49,25 +52,6 @@ class BillingClientWrapper(
         })
     }
 
-    suspend fun query2() {
-        val params = QueryProductDetailsParams.newBuilder()
-        val productList = mutableListOf<QueryProductDetailsParams.Product>()
-        for (product in LIST_OF_PRODUCTS) {
-            productList.add(
-                QueryProductDetailsParams.Product.newBuilder()
-                    .setProductId(product)
-                    .setProductType(BillingClient.ProductType.SUBS)
-                    .build()
-            )
-        }
-
-        val productDetailsResult = withContext(Dispatchers.IO) {
-            billingClient.queryProductDetails(params.setProductList(productList).build())
-        }
-
-        Log.d(TAG, "결과: $productDetailsResult")
-    }
-
 
     fun queryPurchases() {
         if (!billingClient.isReady) {
@@ -78,12 +62,17 @@ class BillingClientWrapper(
             QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.SUBS).build()
         ) { billingResult, purchaseList ->
             if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                //_purchases.value = purchaseList.ifEmpty { emptyList() }
-                Log.d(TAG, "구입 내역 리스트 성공")
+                processPurchases(purchaseList)
             } else {
-                Log.d(TAG, "구입 내역 리스트 실패")
                 Log.e(TAG, billingResult.debugMessage)
             }
+        }
+    }
+
+    private fun processPurchases(purchaseList: List<Purchase>) {
+        Log.d(TAG, "processPurchases: $purchaseList")
+        CoroutineScope(Dispatchers.IO).launch {
+            _purchases.emit(purchaseList)
         }
     }
 
@@ -123,7 +112,7 @@ class BillingClientWrapper(
                 } else {
                     newMap = productDetailsList.associateBy { it.productId }
                 }
-                _productDetails.postValue(newMap)
+                productDetails.postValue(newMap)
             }
             else -> {
                 Log.d(
@@ -150,7 +139,7 @@ class BillingClientWrapper(
         if (billingResult.responseCode == BillingClient.BillingResponseCode.OK
             && !purchases.isNullOrEmpty()
         ) {
-            //_purchases.value = purchases
+            processPurchases(purchases)
 
             for (purchase in purchases) {
                 acknowledgePurchases(purchase)
@@ -174,7 +163,7 @@ class BillingClientWrapper(
                     if (billingResult.responseCode == BillingClient.BillingResponseCode.OK &&
                         it.purchaseState == Purchase.PurchaseState.PURCHASED
                     ) {
-                        //_isNewPurchaseAcknowledged.value = true
+                        _isNewPurchaseAcknowledged.value = true
                     }
                 }
             }
