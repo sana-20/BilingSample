@@ -7,7 +7,9 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import com.example.bilingsample.BillingViewModel
+import com.example.bilingsample.Constants.BASIC_MONTHLY_PLAN
 import com.example.bilingsample.Constants.BASIC_SUB
+import com.example.bilingsample.Constants.BASIC_YEARLY_PLAN
 import com.example.bilingsample.databinding.FragmentBasicBinding
 
 class BasicFragment : Fragment() {
@@ -29,11 +31,15 @@ class BasicFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.button.setOnClickListener {
-            viewModel.buy( BASIC_SUB, false, requireActivity())
+            viewModel.buy(BASIC_SUB, BASIC_MONTHLY_PLAN, false)
         }
 
         binding.button2.setOnClickListener {
-            viewModel.buy( BASIC_SUB, true, requireActivity())
+            viewModel.buy(BASIC_SUB, BASIC_YEARLY_PLAN, false)
+        }
+
+        binding.button3.setOnClickListener {
+            viewModel.buy(BASIC_SUB, BASIC_MONTHLY_PLAN, true)
         }
 
     }

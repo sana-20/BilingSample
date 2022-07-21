@@ -5,7 +5,6 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.android.billingclient.api.*
 import com.example.bilingsample.Constants.LIST_OF_PRODUCTS
@@ -18,7 +17,7 @@ import kotlinx.coroutines.launch
 
 class BillingClientWrapper(
     private val context: Context
-) :  PurchasesUpdatedListener, ProductDetailsResponseListener {
+) : DefaultLifecycleObserver, PurchasesUpdatedListener, ProductDetailsResponseListener {
 
     val productDetails = MutableLiveData<Map<String, ProductDetails>>()
 
@@ -28,10 +27,27 @@ class BillingClientWrapper(
     private val _isNewPurchaseAcknowledged = MutableStateFlow(value = false)
     val isNewPurchaseAcknowledged = _isNewPurchaseAcknowledged.asStateFlow()
 
-    private val billingClient = BillingClient.newBuilder(context)
-        .setListener(this)
-        .enablePendingPurchases()
-        .build()
+    private lateinit var billingClient: BillingClient
+
+    override fun onCreate(owner: LifecycleOwner) {
+        super.onCreate(owner)
+
+        billingClient = BillingClient.newBuilder(context)
+            .setListener(this)
+            .enablePendingPurchases()
+            .build()
+
+        if (!billingClient.isReady) {
+            startBillingConnection()
+        }
+    }
+
+    override fun onDestroy(owner: LifecycleOwner) {
+        super.onDestroy(owner)
+        if (billingClient.isReady) {
+            billingClient.endConnection()
+        }
+    }
 
     fun startBillingConnection() {
         billingClient.startConnection(object : BillingClientStateListener {
@@ -70,7 +86,6 @@ class BillingClientWrapper(
     }
 
     private fun processPurchases(purchaseList: List<Purchase>) {
-        Log.d(TAG, "processPurchases: $purchaseList")
         CoroutineScope(Dispatchers.IO).launch {
             _purchases.emit(purchaseList)
         }
@@ -170,11 +185,14 @@ class BillingClientWrapper(
         }
     }
 
-    fun terminateBillingConnection() {
-        billingClient.endConnection()
+    companion object {
+        @Volatile
+        private var INSTANCE: BillingClientWrapper? = null
+
+        fun getInstance(applicationContext: Context): BillingClientWrapper =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: BillingClientWrapper(applicationContext).also { INSTANCE = it }
+            }
     }
-
-
-
 
 }

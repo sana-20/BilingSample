@@ -1,27 +1,19 @@
 package com.example.bilingsample
 
-import android.app.Activity
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.ProductDetails
 import com.example.bilingsample.Constants.TAG
-import com.example.bilingsample.biling.BillingClientWrapper
 
 class BillingViewModel(application: Application) : AndroidViewModel(application) {
 
-    var billingClient: BillingClientWrapper = BillingClientWrapper(application)
-
-    private val productDetails = billingClient.productDetails
+    private val productDetails = (application as BillingApp).billingClientWrapper.productDetails
 
     val buyEvent = SingleLiveEvent<BillingFlowParams>()
 
-    private val purchases = billingClient.purchases
-
-    init {
-        billingClient.startBillingConnection()
-    }
+    private val purchases =  (application as BillingApp).billingClientWrapper.purchases
 
     private fun billingFlowParamsBuilder(productDetails: ProductDetails, offerToken: String):
             BillingFlowParams {
@@ -62,7 +54,7 @@ class BillingViewModel(application: Application) : AndroidViewModel(application)
         var leastPricedOffer: ProductDetails.SubscriptionOfferDetails
         var lowestPrice = Int.MAX_VALUE
 
-        if (!offerDetails.isNullOrEmpty()) {
+        if (offerDetails.isNotEmpty()) {
             for (offer in offerDetails) {
                 for (price in offer.pricingPhases.pricingPhaseList) {
                     if (price.priceAmountMicros < lowestPrice) {
@@ -91,7 +83,7 @@ class BillingViewModel(application: Application) : AndroidViewModel(application)
     }
 
 
-    fun buy(product: String, upDowngrade: Boolean, activity: Activity) {
+    fun buy(product: String, tag: String, upDowngrade: Boolean) {
         val productDetails = productDetails.value?.get(product) ?: run {
             Log.e(TAG, "Could not find ProductDetails to make purchase.")
             return
@@ -101,7 +93,7 @@ class BillingViewModel(application: Application) : AndroidViewModel(application)
             productDetails.subscriptionOfferDetails?.let {
                 retrieveEligibleOffers(
                     offerDetails = it,
-                    tag = ""
+                    tag = tag
                 )
             }
 
@@ -120,20 +112,15 @@ class BillingViewModel(application: Application) : AndroidViewModel(application)
                 oldToken = oldToken
             )
 
-            billingClient.launchBillingFlow(activity, billingParams)
+            buyEvent.postValue(billingParams)
         } else {
             val billingParams = billingFlowParamsBuilder(
                 productDetails = productDetails,
                 offerToken = offerToken
             )
 
-            billingClient.launchBillingFlow(activity, billingParams)
+            buyEvent.postValue(billingParams)
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        billingClient.terminateBillingConnection()
     }
 
 }
